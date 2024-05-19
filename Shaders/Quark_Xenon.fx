@@ -270,7 +270,7 @@ float4 UpSample5(float4 vpos : SV_Position, float2 xy : TexCoord) : SV_Target {
 //Blending
 //=============================================================================
 
-float3 ZN_DUAL(float4 vpos : SV_Position, float2 texcoord : TexCoord) : SV_Target
+float3 QUARK_BLOOM(float4 vpos : SV_Position, float2 texcoord : TexCoord) : SV_Target
 {
 	float  depth = 1f - ReShade::GetLinearizedDepth(texcoord);
 	float3 input = tex2D(ReShade::BackBuffer, texcoord).rgb;
@@ -346,6 +346,6 @@ ui_label = "Quark: Xenon";
 	pass
 	{
 		VertexShader = PostProcessVS;
-		PixelShader = ZN_DUAL;
+		PixelShader = QUARK_BLOOM;
 	}
 }
