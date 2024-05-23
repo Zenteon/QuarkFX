@@ -23,13 +23,22 @@
 //========================================================================
 
 #include "ReShade.fxh"
-#define WRAPSAM AddressU = CLAMP; AddressV = CLAMP; AddressW = CLAMP;
-#define RES float2(BUFFER_WIDTH, BUFFER_HEIGHT)
+
 #ifndef Full_Control
 //============================================================================================
 	#define Full_Control 0
 //============================================================================================
 #endif
+
+
+
+
+//#if(Sample_Wrap == 0)
+#define WRAPSAM AddressU = CLAMP; AddressV = CLAMP; AddressW = CLAMP;
+//#else
+//	#define WRAPSAM AddressU = WRAP; AddressV = WRAP; AddressW = WRAP;
+//#endif	
+#define RES float2(BUFFER_WIDTH, BUFFER_HEIGHT)
 
 namespace Xenon {
 	texture DirtTex < source = "QuarkDirt.png"; >
@@ -68,10 +77,10 @@ uniform float BLOOM_INTENSITY <
 uniform float BLOOM_BRIGHT <
 	ui_type = "slider";
 	ui_min = 0.0;
-	ui_max = 2.0;
+	ui_max = 3.0;
 	ui_label = "Bloom Brightness";
 	ui_tooltip = "Intensity of added bloom";
-> = 1.0;
+> = 1.5;
 
 uniform float DEPTH_MASK <
 	ui_type = "slider";
@@ -91,6 +100,15 @@ uniform bool DEBUG <
 	ui_label = "Display Raw Bloom\n\n";
 	hidden = !Full_Control;
 > = 0;
+
+uniform float HDR_RED <
+	ui_type = "slider";
+	ui_min = 1.001;
+	ui_max = 1.2;
+	ui_label = "Range Expansion";
+	hidden = !Full_Control;
+	ui_tooltip = "Desaturates highlights and reduces point intensity";
+> = 1.03;
 
 uniform float POSXPOS <
 	ui_type = "slider";
@@ -182,8 +200,8 @@ float4 DownSample(float2 xy, sampler input, float div)//0.375 + 0.25
     float4 acc = 0.125 * tex2D(input, xy);
     acc += 0.125 * tex2D(input, xy - hp * offset);
     acc += 0.125 * tex2D(input, xy + hp * offset);
+    acc += 0.125 * tex2D(input, xy + float2(-hp.x, hp.y) * offset);
     acc += 0.125 * tex2D(input, xy + float2(hp.x, -hp.y) * offset);
-    acc += 0.125 * tex2D(input, xy - float2(hp.x, -hp.y) * offset);
     
     acc += 0.0625 * tex2D(input, xy - float2(2f * hp.x, 0) * offset);
     acc += 0.0625 * tex2D(input, xy + float2(0, 2f * hp.y) * offset);
@@ -194,9 +212,8 @@ float4 DownSample(float2 xy, sampler input, float div)//0.375 + 0.25
     acc += 0.03125 * tex2D(input, xy + hp * 2f * offset);
     acc += 0.03125 * tex2D(input, xy + float2(hp.x, -hp.y) * 2f * offset);
     acc += 0.03125 * tex2D(input, xy - float2(hp.x, -hp.y) * 2f * offset);
-    
-    
 
+  
     return acc;
 
 }
@@ -216,17 +233,17 @@ float4 UpSample(float2 xy, sampler input, float div)
     acc += 0.1875 * tex2D(input, xy - float2(hp.x, -hp.y) * offset);
 	
 	acc += 0.0625 * tex2D(input, xy + hp * float2(2f, 0) * offset);
-    acc += 0.0625 * tex2D(input, xy + hp * float2(-2f, 0) * offset);
-    acc += 0.0625 * tex2D(input, xy + hp * float2(0, 2f) * offset);
-    acc += 0.0625 * tex2D(input, xy + hp * float2(0, -2f) * offset);
-	
+	acc += 0.0625 * tex2D(input, xy + hp * float2(-2f, 0) * offset);
+	acc += 0.0625 * tex2D(input, xy + hp * float2(0, 2f) * offset);
+	acc += 0.0625 * tex2D(input, xy + hp * float2(0, -2f) * offset);
+
     return acc / 1.5;
 }
 
 //=============================================================================
 //Tonemappers
 //=============================================================================
-#define HDR_RED 1.02
+
 float3 ReinhardtJ(float3 x) //Modified Reinhardt Jodie
 {
 	float  lum = dot(x, float3(0.2126, 0.7152, 0.0722));
@@ -312,12 +329,12 @@ float3 QUARK_BLOOM(float4 vpos : SV_Position, float2 texcoord : TexCoord) : SV_T
 	float4 bloom =  UpSample(texcoord, BloomSam, 1.0);
 	
 	bloom.rgb = pow(bloom.rgb / 4.75, 1.0 / PREXPOS);
-	bloom = pow(bloom, POSXPOS);
+	bloom.rgb = pow(bloom.rgb, POSXPOS);
 	
 	float4 dirt  = bloom * tex2D(XenDirt, texcoord);
-	bloom = lerp(bloom, bloom + dirt, DIRT_STRENGTH);
+	bloom.rgb = lerp(bloom.rgb, bloom.rgb + dirt.rgb, DIRT_STRENGTH);
 
-	float mask = exp(-max(depth - tex2D(DownSam4, texcoord).a, 0.0) * DEPTH_MASK);
+	float mask = exp(-max(depth - UpSample(texcoord, UpSam0, 32.0).a, 0.0) * DEPTH_MASK);
 	
 	input = lerp(input, bloom.rgb, mask * 0.3 * BLOOM_INTENSITY);
 	
