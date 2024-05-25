@@ -20,19 +20,19 @@ To "convey" a work means any kind of propagation that enables other parties to m
 To "contribute" refers to offering any form of material held to copyright to be used in the project. This could be in any way, such as, but not limited to: pull requests, explicitly sharing it with the author or giving permission for the use of it.
 
 1. Redistribution
-Public propagation of this project or parts of it requires you to exclusively use the official links provided by the author. This means that independently hosting a copy of this project and propagating it using this hosted version is prohibited. The usage of link monetization services on redistribution is strictly prohibited. Websites and Blogs collecting projects similar to this project are required to ask for explicit permission before adding this project to its database.
+  Public propagation of this project or parts of it requires you to exclusively use the official links provided by the author. This means that independently hosting a copy of this project and propagating it using this hosted version is prohibited. The usage of link monetization services on redistribution is strictly prohibited. Websites and Blogs collecting projects similar to this project are required to ask for explicit permission before adding this project to its database.
 
 2. Private Modifications
-Users are allowed to create private modifications of this project or its code without explicit permission. Redistribution of these modified versions however require explicit permission by the author of the original project. See section 3 for more information about public modifications.
+  Users are allowed to create private modifications of this project or its code without explicit permission. Redistribution of these modified versions however require explicit permission by the author of the original project. See section 3 for more information about public modifications.
 
-3 Public Modifications
-Public redistribution of a modified version of this project or its code requires explicit permission from the original author. In order for the modification to be applicable for this it has to contain a certain amount of original work by the user. This modified version's source code must be publicly available unless explicit permission is given by the original author. The modification's license must not be changed unless explicit permission is given by the original author. Furthermore the original project and its author have to be clearly credited. Any means of monetization through this modified version is strictly prohibited unless explicit permission by the original project's author is given.
+3. Public Modifications
+  Public redistribution of a modified version of this project or its code requires explicit permission from the original author. In order for the modification to be applicable for this it has to contain a certain amount of original work by the user. This modified version's source code must be publicly available unless explicit permission is given by the original author. The modification's license must not be changed unless explicit permission is given by the original author. Furthermore the original project and its author have to be clearly credited. Any means of monetization through this modified version is strictly prohibited unless explicit permission by the original project's author is given.
 
-4 Usage of parts of this project as part of another, original project
-Using parts of this project's source code as part of another, original project requires explicit permission from this project's author. Furthermore this project, its author and the parts used have to be clearly credited. Additionally any means of monetization on this modified version are prohibited unless explicit permission is given.
+4. Usage of parts of this project as part of another, original project
+  Using parts of this project's source code as part of another, original project requires explicit permission from this project's author. Furthermore this project, its author and the parts used have to be clearly credited. Additionally any means of monetization on this modified version are prohibited unless explicit permission is given.
 
-5 Liability
-The project is provided "as is", without warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose and noninfringement. In no event shall the author or copyright holders be liable for any claim, damages or other liability, whether in an action of contract, tort or otherwise, arising from, out of or in connection with the project or the use or other dealings in the project.
+5. Liability
+  The project is provided "as is", without warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose and noninfringement. In no event shall the author or copyright holders be liable for any claim, damages or other liability, whether in an action of contract, tort or otherwise, arising from, out of or in connection with the project or the use or other dealings in the project.
 
-Disclaimer
-This License and its terms are subject to change and review at any time by this project's author.
+6. Disclaimer
+  This License and its terms are subject to change and review at any time by this project's author.
