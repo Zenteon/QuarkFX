@@ -391,7 +391,7 @@
 	int Dx9Warning <
 		ui_type = "radio";
 		ui_text = "Oops, looks like you're using DX9\n"
-			"if you're would like to use Quark Shaders in DX9 games, please use a wrapper like DXVK or dgVoodoo2";
+			"if you would like to use Quark Shaders in DX9 games, please use a wrapper like DXVK or dgVoodoo2";
 		ui_label = " ";
 		> = 0;
 		
