@@ -13,7 +13,7 @@
 	
 	
 	======================================================================	
-	Quark: Xenon v0.1 - Authored by Daniel Oren-Ibarra "Zenteon"
+	Quark: Xenon v0.2 - Authored by Daniel Oren-Ibarra "Zenteon"
 	
 	Discord: https://discord.gg/PpbcqJJs6h
 	Patreon: https://patreon.com/Zenteon
@@ -30,11 +30,18 @@
 
 	#include "ReShade.fxh"
 
-	#ifndef Full_Control
+	#ifndef FULL_CONTROL
 	//============================================================================================
-		#define Full_Control 0
+		#define FULL_CONTROL 0
 	//============================================================================================
 	#endif
+	
+	#ifndef EMX
+	//============================================================================================
+		#define EMX 0
+	//============================================================================================
+	#endif
+	
 	//#if(Sample_Wrap == 0)
 	#define CLAMPSAM AddressU = CLAMP; AddressV = CLAMP; AddressW = CLAMP;
 	#define WRAPSAM AddressU = WRAP; AddressV = WRAP; AddressW = WRAP;
@@ -67,13 +74,14 @@
 		ui_type = "slider";
 		ui_min = 0.5;
 		ui_max = 1.0;
+		hidden = !FULL_CONTROL;
 		ui_label = "Bloom Radius";
 	> = 1.0;
 	
 	uniform float BLOOM_INTENSITY <
 		ui_type = "slider";
 		ui_min = 0.0;
-		ui_max = 1.0 + Full_Control;
+		ui_max = 1.0 + FULL_CONTROL;
 		ui_label = "Bloom Intensity";
 		ui_tooltip = "How much bloom is added into the original image";
 	> = 0.25;
@@ -97,12 +105,12 @@
 		ui_type = "slider";
 		ui_min = 0.0;
 		ui_max = 2.0;
-		ui_label = "Dirt Instensity";
+		ui_label = "Dirt Intensity";
 	> = 0.8;
 	
 	uniform bool DEBUG <
 		ui_label = "Display Raw Bloom\n\n";
-		hidden = !Full_Control;
+		hidden = !FULL_CONTROL;
 	> = 0;
 	
 	uniform float HDR_RED <
@@ -110,7 +118,7 @@
 		ui_min = 1.001;
 		ui_max = 1.2;
 		ui_label = "Range Expansion";
-		hidden = !Full_Control;
+		hidden = !FULL_CONTROL;
 		ui_tooltip = "Desaturates highlights and reduces point intensity";
 	> = 1.03;
 	
@@ -119,7 +127,7 @@
 		ui_min = 0.5;
 		ui_max = 2.0;
 		ui_label = "Post Contrast";
-		hidden = !Full_Control;
+		hidden = !FULL_CONTROL;
 		ui_tooltip = "Desaturates highlights and reduces point intensity";
 	> = 1.5;
 	
@@ -128,31 +136,31 @@
 		ui_min = 0.9;
 		ui_max = 3.0;
 		ui_label = "Pre Exposure";
-		hidden = !Full_Control;
+		hidden = !FULL_CONTROL;
 		ui_tooltip = "Desaturates highlights and reduces point intensity";
 	> = 2.5;
 	
 	uniform float KERNEL_SHAPE <
 		ui_type = "slider";
 		ui_min = 0.1;
-		ui_max = 0.9;
+		ui_max = 1.0;
 		ui_label = "Kernel Shape";
-		hidden = !Full_Control;
+		hidden = !FULL_CONTROL;
 		ui_tooltip = "Modify the shape of the bloom kernel";
-	> = 0.8;
+	> = 0.7;
 	
 	uniform float BLOOM_SAT <
 		ui_type = "slider";
 		ui_min = 0.0;
 		ui_max = 1.5;
 		ui_label = "Bloom Saturation";
-		hidden = !Full_Control;
+		hidden = !FULL_CONTROL;
 	> = 1.1;
 	
 	uniform float3 BLOOM_COL <
 		ui_type = "color";
 		ui_label = "Bloom Color";
-		hidden = !Full_Control;
+		hidden = !FULL_CONTROL;
 	> = 1.0;	
 	
 	
@@ -165,7 +173,11 @@
 		texture DownTex3{Width = BUFFER_WIDTH / 16; Height = BUFFER_HEIGHT / 16; Format = RGBA16F;};
 		texture DownTex4{Width = BUFFER_WIDTH / 32; Height = BUFFER_HEIGHT / 32; Format = RGBA16F;};
 		texture DownTex5{Width = BUFFER_WIDTH / 64; Height = BUFFER_HEIGHT / 64; Format = RGBA16F;};
+		texture DownTex6{Width = BUFFER_WIDTH / 128; Height = BUFFER_HEIGHT / 128; Format = RGBA16F;};
+		texture DownTex7{Width = BUFFER_WIDTH / 256; Height = BUFFER_HEIGHT / 256; Format = RGBA16F;};
 		
+		texture UpTex000{Width = BUFFER_WIDTH / 128; Height = BUFFER_HEIGHT / 128; Format = RGBA16F;};
+		texture UpTex00{Width = BUFFER_WIDTH / 64; Height = BUFFER_HEIGHT / 64; Format = RGBA16F;};
 		texture UpTex0{Width = BUFFER_WIDTH / 32; Height = BUFFER_HEIGHT / 32; Format = RGBA16F;};
 		texture UpTex1{Width = BUFFER_WIDTH / 16; Height = BUFFER_HEIGHT / 16; Format = RGBA16F;};
 		texture UpTex2{Width = BUFFER_WIDTH / 8; Height = BUFFER_HEIGHT / 8; Format = RGBA16F;};
@@ -181,12 +193,17 @@
 	sampler DownSam3{Texture = XEN::DownTex3; CLAMPSAM};
 	sampler DownSam4{Texture = XEN::DownTex4; CLAMPSAM};
 	sampler DownSam5{Texture = XEN::DownTex5; CLAMPSAM};
+	sampler DownSam6{Texture = XEN::DownTex6; CLAMPSAM};
+	sampler DownSam7{Texture = XEN::DownTex7; CLAMPSAM};
 	
+	sampler UpSam000{Texture = XEN::UpTex000; CLAMPSAM};
+	sampler UpSam00{Texture = XEN::UpTex00; CLAMPSAM};
 	sampler UpSam0{Texture = XEN::UpTex0; CLAMPSAM};
 	sampler UpSam1{Texture = XEN::UpTex1; CLAMPSAM};
 	sampler UpSam2{Texture = XEN::UpTex2; CLAMPSAM};
 	sampler UpSam3{Texture = XEN::UpTex3; CLAMPSAM};
 	sampler UpSam4{Texture = XEN::UpTex4; CLAMPSAM};
+	
 	
 	sampler BloomSam{Texture = XEN::BloomTex; CLAMPSAM};
 	
@@ -202,20 +219,20 @@
 	    float offset = BLUR_OFFSET;
 	
 	    float4 acc = 0.125 * tex2D(input, xy);
-	    acc += 0.125 * tex2D(input, xy - hp * offset);
-	    acc += 0.125 * tex2D(input, xy + hp * offset);
-	    acc += 0.125 * tex2D(input, xy + float2(-hp.x, hp.y) * offset);
+	    acc += 0.125 * tex2D(input, xy + float2(hp.x, hp.y) * offset);
 	    acc += 0.125 * tex2D(input, xy + float2(hp.x, -hp.y) * offset);
+	    acc += 0.125 * tex2D(input, xy + float2(-hp.x, hp.y) * offset);
+	    acc += 0.125 * tex2D(input, xy + float2(-hp.x, -hp.y) * offset);
 	    
-	    acc += 0.0625 * tex2D(input, xy - float2(2f * hp.x, 0) * offset);
+	    acc += 0.0625 * tex2D(input, xy + float2(2f * hp.x, 0) * offset);
 	    acc += 0.0625 * tex2D(input, xy + float2(0, 2f * hp.y) * offset);
 	    acc += 0.0625 * tex2D(input, xy + float2(2f * -hp.x,0) * offset);
-	    acc += 0.0625 * tex2D(input, xy - float2(0, 2f*-hp.y) * offset);
+	    acc += 0.0625 * tex2D(input, xy + float2(0, 2f*-hp.y) * offset);
 	    
-	    acc += 0.03125 * tex2D(input, xy - hp * 2f * offset);
-	    acc += 0.03125 * tex2D(input, xy + hp * 2f * offset);
+	    acc += 0.03125 * tex2D(input, xy + float2(hp.x, hp.y) * 2f * offset);
 	    acc += 0.03125 * tex2D(input, xy + float2(hp.x, -hp.y) * 2f * offset);
-	    acc += 0.03125 * tex2D(input, xy - float2(hp.x, -hp.y) * 2f * offset);
+	    acc += 0.03125 * tex2D(input, xy + float2(-hp.x, hp.y) * 2f * offset);
+	    acc += 0.03125 * tex2D(input, xy + float2(-hp.x, -hp.y) * 2f * offset);
 	
 	  
 	    return acc;
@@ -228,18 +245,18 @@
 		float2 res = float2(BUFFER_WIDTH, BUFFER_HEIGHT) / div;
 	    
 	    float offset = BLUR_OFFSET;
-	    float2 hp =  0.65 / res;
+	    float2 hp =  0.5 / res;
 		float4 acc = 0.5 * tex2D(input, xy); 
 	    
-	    acc += 0.1875 * tex2D(input, xy - hp * offset);
-	    acc += 0.1875 * tex2D(input, xy + hp * offset);
+	    acc += 0.1875 * tex2D(input, xy + float2(hp.x, hp.y) * offset);
 	    acc += 0.1875 * tex2D(input, xy + float2(hp.x, -hp.y) * offset);
-	    acc += 0.1875 * tex2D(input, xy - float2(hp.x, -hp.y) * offset);
+	    acc += 0.1875 * tex2D(input, xy + float2(-hp.x, hp.y) * offset);
+	    acc += 0.1875 * tex2D(input, xy + float2(-hp.x, -hp.y) * offset);
 		
-		acc += 0.0625 * tex2D(input, xy + hp * float2(2f, 0) * offset);
-		acc += 0.0625 * tex2D(input, xy + hp * float2(-2f, 0) * offset);
-		acc += 0.0625 * tex2D(input, xy + hp * float2(0, 2f) * offset);
-		acc += 0.0625 * tex2D(input, xy + hp * float2(0, -2f) * offset);
+		acc += 0.0625 * tex2D(input, xy + hp * float2(2, 0) * offset);
+		acc += 0.0625 * tex2D(input, xy + hp * float2(-2, 0) * offset);
+		acc += 0.0625 * tex2D(input, xy + hp * float2(0, 2) * offset);
+		acc += 0.0625 * tex2D(input, xy + hp * float2(0, -2) * offset);
 	
 	    return acc / 1.5;
 	}
@@ -299,11 +316,22 @@
 	
 	float4 DownSample5(float4 vpos : SV_Position, float2 xy : TexCoord) : SV_Target {
 		return DownSample(xy, DownSam4, 64.0);	}
+		
+	float4 DownSample6(float4 vpos : SV_Position, float2 xy : TexCoord) : SV_Target {
+		return DownSample(xy, DownSam5, 128.0);	}
+		
+	float4 DownSample7(float4 vpos : SV_Position, float2 xy : TexCoord) : SV_Target {
+		return DownSample(xy, DownSam6, 256.0);	}
 	//====
 	
+	float4 UpSample000(float4 vpos : SV_Position, float2 xy : TexCoord) : SV_Target {
+		return lerp(tex2D(DownSam6, xy), UpSample(xy, DownSam7, 256.0), 0.3 * KERNEL_SHAPE);	}
+	
+	float4 UpSample00(float4 vpos : SV_Position, float2 xy : TexCoord) : SV_Target {
+		return lerp(tex2D(DownSam5, xy), UpSample(xy, UpSam000, 128.0), 0.3 * KERNEL_SHAPE);	}
 	
 	float4 UpSample0(float4 vpos : SV_Position, float2 xy : TexCoord) : SV_Target {
-		return lerp(tex2D(DownSam4, xy), UpSample(xy, DownSam5, 64.0), 0.4 * KERNEL_SHAPE);	}
+		return lerp(tex2D(DownSam4, xy), UpSample(xy, UpSam00, 64.0), 0.4 * KERNEL_SHAPE);	}
 	
 	float4 UpSample1(float4 vpos : SV_Position, float2 xy : TexCoord) : SV_Target {
 		return lerp(tex2D(DownSam3, xy), UpSample(xy, UpSam0, 32.0), 0.5 * KERNEL_SHAPE);	}
@@ -374,7 +402,11 @@
 		pass {VertexShader = PostProcessVS; PixelShader = DownSample3;		RenderTarget = XEN::DownTex3; }
 		pass {VertexShader = PostProcessVS; PixelShader = DownSample4;		RenderTarget = XEN::DownTex4; }
 		pass {VertexShader = PostProcessVS; PixelShader = DownSample5;		RenderTarget = XEN::DownTex5; }
+		pass {VertexShader = PostProcessVS; PixelShader = DownSample6;		RenderTarget = XEN::DownTex6; }
+		pass {VertexShader = PostProcessVS; PixelShader = DownSample7;		RenderTarget = XEN::DownTex7; }
 		
+		pass {VertexShader = PostProcessVS; PixelShader = UpSample000;		RenderTarget = XEN::UpTex000; }
+		pass {VertexShader = PostProcessVS; PixelShader = UpSample00;		RenderTarget = XEN::UpTex00; }
 		pass {VertexShader = PostProcessVS; PixelShader = UpSample0;		RenderTarget = XEN::UpTex0; }
 		pass {VertexShader = PostProcessVS; PixelShader = UpSample1;		RenderTarget = XEN::UpTex1; }
 		pass {VertexShader = PostProcessVS; PixelShader = UpSample2;		RenderTarget = XEN::UpTex2; }
