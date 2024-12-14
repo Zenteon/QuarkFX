@@ -23,7 +23,7 @@
 //========================================================================
 
 #include "ReShade.fxh"
-#include "ContinuityCommon.fxh"
+#include "QuarkCommon.fxh"
 #define HDR 1.01
 
 uniform float INTENSITY <
@@ -143,6 +143,8 @@ namespace TurboGI {
 		float3 pos = NorEyePos(xy);
 		float3 dx = pos - NorEyePos(xy + float2(fp.x, 0.0));
 		float3 dy = pos - NorEyePos(xy + float2(0.0, fp.y));
+		
+		
 		return float4(0.5 + 0.5 * normalize(cross(dy, dx)), 1.0);
 	}
 	
@@ -188,6 +190,9 @@ namespace TurboGI {
 			float dirW = clamp(1.0 / (1.0 + dot(normalize(surfN.xy + off), off)), 0.1, 3.0); //Debias weight			
 			
 			off = normalize(surfN.xy + off) / RES;
+			float3 slcN = normalize(cross(float3(off, 0.0f), vieV ));
+    		float3 prjN = (surfN - slcN * dot(surfN, slcN));
+			
 			
 			float rnd = IGN((FRAME_MOD + vpos.xy) % RES) + 0.5;
 			
@@ -207,13 +212,13 @@ namespace TurboGI {
 				float3 sampL = tex2Dlod(LumDiv, float4(sampXY, 0, lod)).rgb;
 				
 				float3 posR  = GetEyePos(sampXY, sampD);
-				maxDot = max(maxDot, dot(-surfN, normalize(posR - posV)));
+				maxDot = max(maxDot, dot(prjN, normalize(posR - posV)));
 				
-				
-				float  trns  = max(CalcTransfer(posV, surfN, posR, sampN, 20.0, 1.0), 0.0);
+				//CalcTransfer(posV, prjN, posR, sampN, 20.0, 1.0, 0.0)
+				float  trns  = max(CalcTransfer(posV, prjN, posR, sampN, 20.0, 1.0, 0.0), 0.0);
 				acc += 1.25 * sampL * trns;
 			}
-			aoAcc += dirW * (maxDot) / 3.0;
+			aoAcc += (1.0 - (maxDot)) / 3.0;
 		}
 		return float4(ReinJ(acc, HDR, 0, 0), aoAcc);
 	
@@ -315,6 +320,25 @@ namespace TurboGI {
 		return saturate(f);
 	}
 	
+	float3 Albedont(float2 xy)
+	{
+		float3 c = GetBackBuffer(xy + 0.5 / RES);
+		float cl = dot(c, 0.3);//GetLuminance(c);
+		float g = abs(ddx_fine(cl)) + abs(ddy_fine(cl));
+		c = 0.95 * c / (0.05 + cl);
+		c*=c;
+		
+		
+		//cl = cl / (cl + 1.0);
+		cl = sqrt(cl);
+		return lerp(c*cl, cl, 0.5);
+		
+		//c = SRGBtoOKLAB(c);
+		//c.x = sqrt(c.x);
+		//c = OKLABtoSRGB(c);
+		//return pow(c, 2.2);
+	}
+	
 	float3 Blend(float4 vpos : SV_Position, float2 xy : TexCoord) : SV_Target
 	{
 		
@@ -335,12 +359,12 @@ namespace TurboGI {
 		if(DEBUG) return lerp(ReinJ(AO * 0.33 + IReinJ(GI.rgb, HDR, 0, 0) * INTENSITY, HDR, 0, 0), 0.5, lerpVal);
 		
 		//Fake albedo
-		float inGray = prein.r + prein.g + prein.b;
-		float3 albedo = pow(2.0 * prein / (1.0 + inGray), 2.2);
+		//float inGray = prein.r + prein.g + prein.b;
+		float3 albedo = Albedont(xy);//pow(2.0 * prein / (1.0 + inGray), 2.2);
 		
 		//GI blending
 		GI.rgb = IReinJ(GI.rgb, HDR, 0, 0);
-		GI.rgb *= INTENSITY * albedo;
+		GI.rgb *= 0.1 * INTENSITY * albedo;
 		input = IReinJ(input, HDR, 0, 0);
 		
 		
