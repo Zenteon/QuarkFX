@@ -13,7 +13,7 @@
 	
 	
 	======================================================================	
-	Quark: Local Contrast v0.1 - Authored by Daniel Oren-Ibarra "Zenteon"
+	Quark: Local Contrast v0.2 - Authored by Daniel Oren-Ibarra "Zenteon"
 	
 	Discord: https://discord.gg/PpbcqJJs6h
 	Patreon: https://patreon.com/Zenteon
@@ -70,25 +70,25 @@
 		ui_items = "None\0Image Difference\0Mask Difference\0";
 		ui_label = "Debug";
 	> = 0;
-	
+	#define DMULT 0.5
 	namespace QLC0 {
-		texture BlurTex0  { DIVRES(1); Format = R16; };
-		texture BlurTex1  { DIVRES(1); Format = R16; };
+		texture BlurTex0  { DIVRES(1 * DMULT); Format = R16; };
+		texture BlurTex1  { DIVRES(1 * DMULT); Format = R16; };
 		
-		texture DownTex0 { DIVRES(2); Format = R16; };
-		texture DownTex1 { DIVRES(4); Format = R16; };
-		texture DownTex2 { DIVRES(8); Format = R16; };
-		texture DownTex3 { DIVRES(16); Format = R16; };
-		texture DownTex4 { DIVRES(32); Format = R16; };
-		texture DownTex5 { DIVRES(64); Format = R16; };
-		texture DownTex6 { DIVRES(128); Format = R16; };
+		texture DownTex0 { DIVRES(2 * DMULT); Format = R16; };
+		texture DownTex1 { DIVRES(4 * DMULT); Format = R16; };
+		texture DownTex2 { DIVRES(8 * DMULT); Format = R16; };
+		texture DownTex3 { DIVRES(16 * DMULT); Format = R16; };
+		texture DownTex4 { DIVRES(32 * DMULT); Format = R16; };
+		texture DownTex5 { DIVRES(64 * DMULT); Format = R16; };
+		texture DownTex6 { DIVRES(128 * DMULT); Format = R16; };
 	
-		texture UpTex5 { DIVRES(64); Format = R16; };
-		texture UpTex4 { DIVRES(32); Format = R16; };
-		texture UpTex3 { DIVRES(16); Format = R16; };
-		texture UpTex2 { DIVRES(8); Format = R16; };
-		texture UpTex1 { DIVRES(4); Format = R16; };
-		texture UpTex0 { DIVRES(2); Format = R16; };
+		texture UpTex5 { DIVRES(64 * DMULT); Format = R16; };
+		texture UpTex4 { DIVRES(32 * DMULT); Format = R16; };
+		texture UpTex3 { DIVRES(16 * DMULT); Format = R16; };
+		texture UpTex2 { DIVRES(8 * DMULT); Format = R16; };
+		texture UpTex1 { DIVRES(4 * DMULT); Format = R16; };
+		texture UpTex0 { DIVRES(2 * DMULT); Format = R16; };
 	
 		sampler BlurSam0  { Texture = BlurTex0;  };
 		sampler BlurSam1  { Texture = BlurTex1;  };
