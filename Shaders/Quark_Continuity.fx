@@ -1,5 +1,5 @@
 #include "ReShade.fxh"
-#include "ContinuityCommon.fxh"
+#include "QuarkCommon.fxh"
 
 #if(__RENDERER__ != 0x9000)
 
@@ -19,7 +19,14 @@
 		ui_label = "Textured Normals Intensity";
 		ui_min = 0.0;
 		ui_max = 1.0;
-	> = 0.7;
+	> = 0.5;
+	
+	uniform float SMTH_THRSH <
+		ui_type = "slider";
+		ui_label = "Smoothed Normals Threshold";
+		ui_min = 0.0;
+		ui_max = 1.0;
+	> = 0.4;
 	
 	uniform float TEX_RAD <
 		ui_type = "slider";
@@ -135,7 +142,8 @@
 			//float dd = GetDepDer(xy);
 			float3 pos = NorEyePos(xy);
 			//float2 norOff = 1.0 - abs(nor.xy);
-			//float cd = GetDepth(xy);
+			float cd = 1.0 - GetDepth(xy);
+			cd *= cd;
 			float2 hp = div / (RES);// + (dd * 1.0 * FARPLANE));
 			//float3 viewV = normalize(pos);
 			float nMul = 1.0;// / (abs(dot(nor, viewV)) + 0.05);
@@ -144,7 +152,7 @@
 			float3 acc;//x, y, normalization value
 			for(int i = -1; i <= 1; i++) for(int ii = -1; ii <= 1; ii++)
 			{
-				float2 offset = hp * float2(i, ii);
+				float2 offset = cd * hp * float2(i, ii);
 				
 				float3 tpos = NorEyePos(xy + offset);
 				float wd = exp( -10.0 * abs( dot(nor, tpos - pos)));
@@ -187,10 +195,10 @@
 		
 		float4 Up1(float4 vpos : SV_Position, float2 texcoord : TexCoord) : SV_Target {	
 			float3 blur = UpSample(DownSam0, texcoord, 2.0);
-			float  blurL =  0.3777 + 0.2 * (blur.r + blur.g + blur.b);
+			float  blurL =  0.2777 + 0.3 * (blur.r + blur.g + blur.b);
 			float3 input = tex2D(ReShade::BackBuffer, texcoord).rgb;
 			
-			return float4(pow(input / blurL, 2.2) , 1.0);//float4(pow(0.8 * input / (blur + 0.2), 1.75), 1.0);
+			return float4(pow(input / blurL, 1.8) , 1.0);//float4(pow(0.8 * input / (blur + 0.2), 1.75), 1.0);
 		}
 	
 		
@@ -239,10 +247,12 @@
 			float3 surfN = 2f * tex2D(NorSam1, xy).xyz - 1f;
 			float3 viewV = normalize(NorEyePos(xy));
 			
-			float2 sobel = GetSobel(LumSam0, xy, 1.0 * TEX_RAD, surfN);
-			sobel += 0.5 * GetSobel(LumSam0, xy, 2.0 * TEX_RAD, surfN);
-			//sobel += 0.25 * GetSobel(LumSam0, texcoord, 3.0 * TEX_RAD, surfN);
-			//sobel += -GetSobel(LumSam0, texcoord, 8.0 * TEX_RAD);
+			float2 sobel = GetSobel(LumSam0, xy, 0.5 * TEX_RAD, surfN);
+			sobel += 0.5 * GetSobel(LumSam0, xy, 1.0 * TEX_RAD, surfN);
+			//sobel += 0.5 * GetSobel(LumSam0, xy, 3.0 * TEX_RAD, surfN);
+			//sobel += 0.5 * GetSobel(LumSam0, xy, 5.0 * TEX_RAD, surfN);
+			//sobel += 0.5 * GetSobel(LumSam0, xy, 8.0 * TEX_RAD, surfN);
+			//sobel += 0.5 * GetSobel(LumSam0, xy, 12.0 * TEX_RAD, surfN);
 			
 			float3 texN = normalize(float3(sobel, 1.0));
 			//dtexN = -normalize(-viewV + texN * dot(texN, -viewV) );
@@ -269,7 +279,7 @@
 			//texN.xy /= texN.z;
 			//texN.z = saturate(texN.z);
 			//surfN.xy /= surfN.z;
-			texN = lerp(float3(0.0, 0.0, 1.0), texN, 0.4);
+			texN = lerp(float3(0.0, 0.0, 1.0), texN, 0.5);
 			surfN = normalize(float3(surfN.xy + texN.xy, surfN.z * texN.z));
 			//surfN.z = saturate(surfN.z);
 			//surfN = normalize(surfN);
@@ -344,7 +354,7 @@
 		}
 		
 		
-		#define RAD 4
+		#define RAD 6
 		
 		float3 NorSmooth(sampler tex, float2 xy, bool x)
 		{
@@ -381,8 +391,8 @@
 				float3 tempVP = GetEyePos(xy + offset, curD);
 				
 				float wG = 1.0;// + abs(i - pow(abs(i), 1.2));//1.0;//exp(-pow((2.0 / RAD) * i, 2.0));
-				float wN = saturate(dot(cenN, curN)) >= 0.4;
-				float wD = exp( -8.0 * abs(dot(cenN, tempVP - surfVP)) );//exp(-2.5 * distance(cenD, curD) / (abs(pdDep * (cenD - curD)) + 0.001) );//exp(-distance(cenD, curD) * 10000.0);
+				float wN = dot(cenN, curN) >= SMTH_THRSH;
+				float wD = exp( -(8.0) * abs(dot(cenN, tempVP - surfVP)) );//exp(-2.5 * distance(cenD, curD) / (abs(pdDep * (cenD - curD)) + 0.001) );//exp(-distance(cenD, curD) * 10000.0);
 				
 				acc  += curN * wN * wD * wG;
 				accW += wN * wD * wG;
@@ -408,28 +418,49 @@
 			return float4(0.5 + 0.5 * Normals, 1f);
 		}
 		
-		float2 SaveSamN(float4 vpos : SV_Position, float2 texcoord : TexCoord) : SV_Target
+		float2 SaveSamN(float4 vpos : SV_Position, float2 xy : TexCoord) : SV_Target
 		{
-			return tex2D(Continuity::NormalBuffer, texcoord).xy;
+			float3 offd;
+			float2 hp = 2.0 / RES;
+			
+			float2 offset = float2(hp.x, hp.y);
+			float d = GetDepth(xy + offset);
+			if(d > offd.z) offd = float3(xy + offset, d);
+			
+			offset = float2(hp.x, -hp.y);
+			d = GetDepth(xy + offset);
+			if(d > offd.z) offd = float3(xy + offset, d);
+			
+			offset = float2(-hp.x, hp.y);
+			d = GetDepth(xy + offset);
+			if(d > offd.z) offd = float3(xy + offset, d);
+			
+			offset = float2(-hp.x, -hp.y);
+			d = GetDepth(xy + offset);
+			if(d > offd.z) offd = float3(xy + offset, d);
+			
+		
+			return tex2D(Continuity::NormalBuffer, offd.xy).xy;
 		}
 		
 		float SaveSamD(float4 vpos : SV_Position, float2 texcoord : TexCoord) : SV_Target
 		{
 			float2 hp = 1.0 / RES; //half res render target
-			float d = 1.0;
+			float d = 0.0;
 			
-			
+			/*
 			d = min(d, ReShade::GetLinearizedDepth(texcoord + float2(hp.x, hp.y) ) );
 			d = min(d, ReShade::GetLinearizedDepth(texcoord + float2(hp.x, -hp.y) ) );
 			d = min(d, ReShade::GetLinearizedDepth(texcoord + float2(-hp.x, hp.y) ) );
 			d = min(d, ReShade::GetLinearizedDepth(texcoord + float2(-hp.x, -hp.y) ) );
+			*/
 			
-			/*
 			d = max(d, ReShade::GetLinearizedDepth(texcoord + float2(hp.x, hp.y) ) );
 			d = max(d, ReShade::GetLinearizedDepth(texcoord + float2(hp.x, -hp.y) ) );
 			d = max(d, ReShade::GetLinearizedDepth(texcoord + float2(-hp.x, hp.y) ) );
 			d = max(d, ReShade::GetLinearizedDepth(texcoord + float2(-hp.x, -hp.y) ) );
-			*/
+			
+			
 			return d;
 		}
 		
