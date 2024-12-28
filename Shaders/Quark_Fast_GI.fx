@@ -370,7 +370,7 @@ namespace TurboGI {
 	
 	float CalcFog(float d, float den)
 	{
-		float2 se = float2(0.0, 0.25 + 0.75 * FADEOUT);
+		float2 se = float2(0.0, 0.001 + 0.999 * FADEOUT);
 		se.y = max(se.y, se.x + 0.001);
 		
 		d = saturate(1.0 / (se.y) * d - se.x);
