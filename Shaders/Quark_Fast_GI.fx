@@ -47,12 +47,12 @@ uniform float RAY_LENGTH <
 	ui_label = "Ray Length";
 > = 1.0;
 
-uniform float DROPOFF <
+uniform float FADEOUT <
 	ui_type = "drag";
-	ui_label = "Depth Dropoff";
+	ui_label = "Depth Fadeout";
 	ui_min = 0.0;
 	ui_max = 1.0;
-> = 0.3;
+> = 0.8;
 
 uniform int DEBUG <
 	ui_type = "combo";
@@ -159,6 +159,8 @@ namespace TurboGI {
 		nor *= 0.25;
 		
 		float3 input = GetBackBuffer(xy);
+		float inLum = GetLuminance(input);
+		input = lerp(input, inLum, 0.5 * inLum*inLum*inLum*inLum);
 		float3 GI = 5.0 * pow(input, 2.2) * tex2D(GISam, xy).rgb;
 		lum = float4(IReinJ(input, HDR, 0, 0) + GI, 1.0);
 		if(dep == 1.0) lum = float4(0.0.xxx, 1.0);
@@ -169,6 +171,19 @@ namespace TurboGI {
 	//============================================================================
 	#define FRAME_MOD (3.0 * (FRAME_COUNT % 32 + 1))
 	
+	float remapSin(float x)
+	{
+		//approximate sin(acos(x)) very poorly
+		return saturate(1.0-x*x) / (0.5 * (1.0-x*x) + 0.5);
+	}
+	
+	float GTAOContr(float3 viewV, float3 surfN, float3 projN, float2 minmax)
+	{
+		//float gm = saturate(acos(dot(-viewV, surfN)));
+		float gm = saturate(acos(dot(viewV, projN)));
+		return 0.25 * (-cos(2.0 * minmax.y - gm) + cos(gm) + 2.0*minmax.y*sin(gm) )
+	    + 0.25 * (-cos(2.0*minmax.x) + cos(gm) + 2.0*minmax.x*sin(gm));
+	}
 	
 	float4 CalcGI(float4 vpos : SV_Position, float2 xy : TexCoord) : SV_Target
 	{
@@ -179,31 +194,35 @@ namespace TurboGI {
 		float3 vieV  = normalize(posV);
 		if(posV.z == FARPLANE) discard;	
 	
-		float dir = 6.28 * IGN(vpos.xy);
+		float dir = 3.1415 * IGN(vpos.xy);
 		float3 acc;
 		float aoAcc;
+		
+		float2 minA;
+		
 		for(int ii; ii < 3; ii++)
 		{
-			dir += 2.093;
+			dir += 3.14159;
 			float2 off = float2(cos(dir), sin(dir));
 			
 			float dirW = clamp(1.0 / (1.0 + dot(normalize(surfN.xy + off), off)), 0.1, 3.0); //Debias weight			
-			
-			off = normalize(surfN.xy + off) / RES;
-			float3 slcN = normalize(cross(float3(off, 0.0f), vieV ));
-    		float3 prjN = (surfN - slcN * dot(surfN, slcN));
-			
-			
 			float rnd = IGN((FRAME_MOD + vpos.xy) % RES) + 0.5;
+			off = normalize(surfN.xy + off);
+			float3 slcN = normalize(cross(float3(off, 0.0f), vieV));
+			//float3 T = cross(viewV, slcN);
+	    	float3 prjN = surfN - slcN * dot(surfN, slcN);
+	   	 //float N = -sign(dot(prjN, T)) * acos( dot(normalize(prjN), viewV) );
+			off /= RES;
+			float2 maxDot;
+			float2 maxAtt;
+			float3 maxPos;
+			float3 maxPos2;
+			//uint bfd;
 			
-			float maxDot;
-			
-			uint bfd;
-			
-			for(int i = 1; i <= 6; i++) 
+			for(int i = 1; i <=89; i++) 
 			{
 				float lod = floor(0.5 * i);
-				float2 sampXY = xy + rnd * RAY_LENGTH * 20.0 * pow(i, 1.5) * off;
+				float2 sampXY = xy + rnd * RAY_LENGTH * 10.0 * pow(1.5, i) * off;
 				if(sampXY.x > 1.0 || sampXY.x < 0.0) break;
 				if(sampXY.y > 1.0 || sampXY.y < 0.0) break;
 				
@@ -212,15 +231,56 @@ namespace TurboGI {
 				float3 sampL = tex2Dlod(LumDiv, float4(sampXY, 0, lod)).rgb;
 				
 				float3 posR  = GetEyePos(sampXY, sampD);
-				maxDot = max(maxDot, dot(prjN, normalize(posR - posV)));
-				
-				//CalcTransfer(posV, prjN, posR, sampN, 20.0, 1.0, 0.0)
+				float cDot = dot(prjN, normalize(posR - posV));
+				float att = rcp(1.0 + 0.01 * dot(posR - posV, posR - posV));
+				[flatten]
+				if(cDot > maxDot.x) {
+					maxDot.x = att * cDot;	
+				}
 				float  trns  = max(CalcTransfer(posV, prjN, posR, sampN, 20.0, 1.0, 0.0), 0.0);
-				acc += 1.25 * sampL * trns;
+				acc += sampL * trns;
 			}
-			aoAcc += (1.0 - (maxDot)) / 3.0;
+			
+			off = -off;//normalize(surfN.xy + off) / RES;
+			slcN = normalize(cross(float3(off, 0.0f), vieV ));
+    		prjN = (surfN - slcN * dot(surfN, slcN));
+			
+			for(int i = 1; i <= 8; i++) 
+			{
+				float lod = floor(0.5 * i);
+				float2 sampXY = xy + rnd * RAY_LENGTH * 10.0 * pow(1.5, i) * off;
+				if(sampXY.x > 1.0 || sampXY.x < 0.0) break;
+				if(sampXY.y > 1.0 || sampXY.y < 0.0) break;
+				
+				float  sampD = tex2Dlod(DepDiv, float4(sampXY, 0, lod)).x + 0.0002;
+				float3 sampN = 2f * tex2Dlod(NorDiv, float4(sampXY, 0, lod)).xyz - 1f;
+				float3 sampL = tex2Dlod(LumDiv, float4(sampXY, 0, lod)).rgb;
+				
+				float3 posR  = GetEyePos(sampXY, sampD);
+				
+				float cDot = dot(prjN, normalize(posR - posV));
+				float att = rcp(1.0 + 0.01 * dot(posR - posV, posR - posV));
+				[flatten]
+				if(cDot > maxDot.y) {
+					maxDot.y = att * cDot;	
+				}
+				
+				
+				//maxDot.y = max(maxDot.y, ));
+				
+				
+				float  trns  = max(CalcTransfer(posV, prjN, posR, sampN, 20.0, 1.0, 0.0), 0.0);
+				acc += sampL * trns;
+			}
+			
+			//maxDot = max(maxDot.x, maxDot.y);//maxDot.x < maxDot.y ? maxDot.yx : maxDot;
+			aoAcc += (1.0 - 0.5 * (maxDot.x + maxDot.y)) / 3.0;
+			
+			//maxDot = acos(maxDot * float2(-1,1));
+			//float cenA = cos(0.5 * (maxDot.x + maxDot.y));
+			
 		}
-		return float4(ReinJ(acc, HDR, 0, 0), aoAcc);
+		return float4(ReinJ(acc / 4.0, HDR, 0, 0), aoAcc);
 	
 	}
 	
@@ -239,9 +299,9 @@ namespace TurboGI {
 		float4 acc = tex2D(CurSam, xy);
 		float accW = 1.0;
 		
-		for(int i = -3; i <= 3; i++) for(int ii = -3; ii <= 3; ii++)
+		for(int i = -2; i <= 2; i++) for(int ii = -2; ii <= 2; ii++)
 		{
-			float2 offset = 4.0 * float2(i, ii) / RES;
+			float2 offset = 6.0 * float2(i, ii) / RES;
 			
 			float4 sampC = tex2Dlod(CurSam, float4(xy + offset, 0, 0));
 			float  sampD = tex2D(DepDiv, xy + offset).x;
@@ -268,7 +328,7 @@ namespace TurboGI {
 		
 		for(int i = -1; i <= 1; i++) for(int ii = -1; ii <= 1; ii++)
 		{
-			float2 offset = 4.0 * float2(i, ii) / RES;
+			float2 offset = 3.0 * float2(i, ii) / RES;
 			
 			float4 sampC = tex2Dlod(DenSam0, float4(xy + offset, 0, 0));
 			float  sampD = tex2D(DepDiv, xy + offset).x;
@@ -310,7 +370,7 @@ namespace TurboGI {
 	
 	float CalcFog(float d, float den)
 	{
-		float2 se = float2(0.0, 0.5 - 0.5 * DROPOFF);
+		float2 se = float2(0.0, 0.25 + 0.75 * FADEOUT);
 		se.y = max(se.y, se.x + 0.001);
 		
 		d = saturate(1.0 / (se.y) * d - se.x);
@@ -364,7 +424,7 @@ namespace TurboGI {
 		
 		//GI blending
 		GI.rgb = IReinJ(GI.rgb, HDR, 0, 0);
-		GI.rgb *= 0.1 * INTENSITY * albedo;
+		GI.rgb *= 0.3 * INTENSITY * albedo;
 		input = IReinJ(input, HDR, 0, 0);
 		
 		
