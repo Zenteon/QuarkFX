@@ -38,7 +38,7 @@ uniform float AO_INTENSITY <
 	ui_max = 1.0;
 	ui_type = "drag";
 	ui_label = "AO Intensity";
-> = 0.8;
+> = 1.0;
 
 uniform float RAY_LENGTH <
 	ui_min = 0.5;
@@ -66,8 +66,8 @@ uniform int FRAME_COUNT <
 	//Bullshit
 	//============================================================================
 
-texture ShitMotionVectors { DIVRES(3); };
-sampler MVSam0 { Texture = ShitMotionVectors; };	
+texture texMotionVectors { DIVRES(1); Format = RG16F; };
+sampler MVSam0 { Texture = texMotionVectors; };	
 	
 namespace TurboGI {
 
@@ -78,7 +78,7 @@ namespace TurboGI {
 	
 	sampler Normal { Texture = NormalTex; WRAPMODE(BORDER); };
 	sampler NorDiv { Texture = NorDivTex; WRAPMODE(BORDER); };
-	sampler DepDiv { Texture = DepDivTex; WRAPMODE(BORDER); };
+	sampler DepDiv { Texture = DepDivTex; WRAPMODE(CLAMP); };
 	sampler LumDiv { Texture = LumDivTex; WRAPMODE(BORDER); };
 	
 	texture GITex { DIVRES(3); Format = RGBA8; MipLevels = 2; };
@@ -157,6 +157,7 @@ namespace TurboGI {
 		nor += tex2Dlod(Normal, float4( xy + float2(-hp.x, hp.y), 0, 2) );
 		nor += tex2Dlod(Normal, float4( xy + float2(-hp.x, -hp.y), 0, 2) );
 		nor *= 0.25;
+		nor.a = 0.0;
 		
 		float3 input = GetBackBuffer(xy);
 		float inLum = GetLuminance(input);
@@ -187,11 +188,12 @@ namespace TurboGI {
 	
 	float4 CalcGI(float4 vpos : SV_Position, float2 xy : TexCoord) : SV_Target
 	{
+		xy = 3.0 * floor(xy * RES * 0.33334) / RES;
 		float3 surfN = 2f * tex2D(Normal, xy).xyz - 1f;
 		
 		
 		float3 posV  = NorEyePos(xy);
-		float3 vieV  = normalize(posV);
+		float3 vieV  = -normalize(posV);
 		if(posV.z == FARPLANE) discard;	
 	
 		float dir = 3.1415 * IGN(vpos.xy);
@@ -199,30 +201,33 @@ namespace TurboGI {
 		float aoAcc;
 		
 		float2 minA;
-		
+		float attm = 1.0 + 0.05 * posV.z;//1.0;// + sqrt(0.1 * posV.z);
 		for(int ii; ii < 3; ii++)
 		{
-			dir += 3.14159;
+			dir += 6.28 / 3.0;
 			float2 off = float2(cos(dir), sin(dir));
 			
 			float dirW = clamp(1.0 / (1.0 + dot(normalize(surfN.xy + off), off)), 0.1, 3.0); //Debias weight			
 			float rnd = IGN((FRAME_MOD + vpos.xy) % RES) + 0.5;
 			off = normalize(surfN.xy + off);
 			float3 slcN = normalize(cross(float3(off, 0.0f), vieV));
-			//float3 T = cross(viewV, slcN);
+			//float3 T = cross(vieV, slcN);
+			//float3 RT = -normalize(cross(cross(surfN, vieV), surfN));//normalize(cross(surfN, float3(-off.y, off.x, 0.0)));
 	    	float3 prjN = surfN - slcN * dot(surfN, slcN);
-	   	 //float N = -sign(dot(prjN, T)) * acos( dot(normalize(prjN), viewV) );
+	    	float3 prjNN = normalize(prjN);
+	   	 //float N = -sign(dot(prjN, T)) * acos( dot(normalize(prjN), vieV) );
+	   	 
 			off /= RES;
-			float2 maxDot;
+			float maxDot = -1.0;//T <= 0 ? -1.0 : -dot(prjN, vieV);//-sign(dot(prjN, T)) * dot(normalize(prjN), vieV);
 			float2 maxAtt;
 			float3 maxPos;
 			float3 maxPos2;
 			//uint bfd;
 			
-			for(int i = 1; i <=89; i++) 
+			for(int i = 1; i <= 9; i++) 
 			{
 				float lod = floor(0.5 * i);
-				float2 sampXY = xy + rnd * RAY_LENGTH * 10.0 * pow(1.5, i) * off;
+				float2 sampXY = xy + rnd * RAY_LENGTH * 20.0 * pow(1.35, i) * off;
 				if(sampXY.x > 1.0 || sampXY.x < 0.0) break;
 				if(sampXY.y > 1.0 || sampXY.y < 0.0) break;
 				
@@ -231,56 +236,31 @@ namespace TurboGI {
 				float3 sampL = tex2Dlod(LumDiv, float4(sampXY, 0, lod)).rgb;
 				
 				float3 posR  = GetEyePos(sampXY, sampD);
-				float cDot = dot(prjN, normalize(posR - posV));
-				float att = rcp(1.0 + 0.01 * dot(posR - posV, posR - posV));
+				float3 sV = normalize(posR - posV);
+				//I got supremely lazy here
+				float cDot = saturate(dot(prjNN, sV));
+				//cDot = dot(sV, normalize(-T)) < 0 ? 1.0 + cDot: cDot;
+				
+				float att = rcp(1.0 + 0.05 * dot(posR.z - posV.z, posR.z - posV.z) / attm);
+				cDot *= att;
+				//att *= !any(abs(sampXY - 0.5) > 0.5);
 				[flatten]
-				if(cDot > maxDot.x) {
-					maxDot.x = att * cDot;	
+				if(cDot > maxDot) {
+					maxDot = lerp(maxDot, cDot, 0.7);
 				}
-				float  trns  = max(CalcTransfer(posV, prjN, posR, sampN, 20.0, 1.0, 0.0), 0.0);
+				float  trns  = max(CalcTransfer(posV, prjNN, posR, sampN, 20.0, 1.0, 0.0), 0.0);
 				acc += sampL * trns;
 			}
-			
-			off = -off;//normalize(surfN.xy + off) / RES;
-			slcN = normalize(cross(float3(off, 0.0f), vieV ));
-    		prjN = (surfN - slcN * dot(surfN, slcN));
-			
-			for(int i = 1; i <= 8; i++) 
-			{
-				float lod = floor(0.5 * i);
-				float2 sampXY = xy + rnd * RAY_LENGTH * 10.0 * pow(1.5, i) * off;
-				if(sampXY.x > 1.0 || sampXY.x < 0.0) break;
-				if(sampXY.y > 1.0 || sampXY.y < 0.0) break;
-				
-				float  sampD = tex2Dlod(DepDiv, float4(sampXY, 0, lod)).x + 0.0002;
-				float3 sampN = 2f * tex2Dlod(NorDiv, float4(sampXY, 0, lod)).xyz - 1f;
-				float3 sampL = tex2Dlod(LumDiv, float4(sampXY, 0, lod)).rgb;
-				
-				float3 posR  = GetEyePos(sampXY, sampD);
-				
-				float cDot = dot(prjN, normalize(posR - posV));
-				float att = rcp(1.0 + 0.01 * dot(posR - posV, posR - posV));
-				[flatten]
-				if(cDot > maxDot.y) {
-					maxDot.y = att * cDot;	
-				}
-				
-				
-				//maxDot.y = max(maxDot.y, ));
-				
-				
-				float  trns  = max(CalcTransfer(posV, prjN, posR, sampN, 20.0, 1.0, 0.0), 0.0);
-				acc += sampL * trns;
-			}
-			
+			//maxDot = max(acos(maxDot), -3.14159);
+			//maxDot = cos(acos(maxDot) - N);
 			//maxDot = max(maxDot.x, maxDot.y);//maxDot.x < maxDot.y ? maxDot.yx : maxDot;
-			aoAcc += (1.0 - 0.5 * (maxDot.x + maxDot.y)) / 3.0;
+			aoAcc += maxDot;//clamp(1.0-maxDot, 0.0, 1);
 			
 			//maxDot = acos(maxDot * float2(-1,1));
 			//float cenA = cos(0.5 * (maxDot.x + maxDot.y));
 			
 		}
-		return float4(ReinJ(acc / 4.0, HDR, 0, 0), aoAcc);
+		return float4(ReinJ(acc / 3.0, HDR, 0, 0), 1.0 - aoAcc / 3.0);
 	
 	}
 	
@@ -294,25 +274,28 @@ namespace TurboGI {
 		if(surfD == 1.0) discard;
 		float3 surfN = 2f * tex2D(Normal, xy).xyz - 1f;
 		float  adpThrsh = 0.2 + saturate(dot(surfN, float3(0.0, 0.0, -1.0)));//Adaptive depth threshold
-		
+		xy = 3.0 * floor(xy * RES * 0.33334) / RES;
 		
 		float4 acc = tex2D(CurSam, xy);
+		float pAO = acc.a;
 		float accW = 1.0;
 		
 		for(int i = -2; i <= 2; i++) for(int ii = -2; ii <= 2; ii++)
 		{
-			float2 offset = 6.0 * float2(i, ii) / RES;
+			float2 offset = 3.0 * float2(i, ii) / RES;
 			
 			float4 sampC = tex2Dlod(CurSam, float4(xy + offset, 0, 0));
 			float  sampD = tex2D(DepDiv, xy + offset).x;
 			//float3 sampN = 2f * tex2D(NorDiv, xy + offset).xyz - 1f;
 			
 			float  wN = 1.0;//pow(saturate(dot(surfN, sampN)), 1.0);
-			float  wD = exp(-distance(surfD, sampD) * (50.0 / surfD) * adpThrsh);
+			float  wD = exp(-abs(surfD - sampD) * (100.0 / surfD) * adpThrsh);
 			acc += wD * wN * sampC;
 			accW += wD * wN;
 		}
 		return acc / accW;
+		//return float4(acc.rgb / accW, acc.a / accW);
+		//return float4(acc.rgb / accW, pAO);
 	}
 	
 	float4 Denoise1(float4 vpos : SV_Position, float2 xy : TexCoord) : SV_Target
@@ -334,7 +317,7 @@ namespace TurboGI {
 			float  sampD = tex2D(DepDiv, xy + offset).x;
 			//float3 sampN = 2f * tex2D(NorDiv, xy + offset).xyz - 1f;
 			float  wN = 1.0;//pow(saturate(dot(surfN, sampN)), 1.0);
-			float  wD = exp(-distance(surfD, sampD) * (200.0 / surfD) * adpThrsh);
+			float  wD = exp(-abs(surfD - sampD) * (100.0 / surfD) * adpThrsh);
 			acc += wD * wN * sampC;
 			accW += wD * wN;
 		}
@@ -456,12 +439,42 @@ namespace TurboGI {
 		float lerpVal = CalcFog(depth, 1.0);
 		
 		//AO
-		float4 GI = tex2D(DenSam1, xy);// * pow(input, 2.2);
+		float4 GI, tGI; // = tex2D(DenSam1, xy);// * pow(input, 2.2);
+		float w, tW;
+		float2 tpos;
+		
+		tpos = floor(0.5 * vpos.xy) + int2(0, 0);
+		tGI = tex2Dfetch(DenSam1, tpos);
+		tW = rcp(0.0001 + abs(GetDepth(2.0 * tpos / RES) - depth));
+		GI += tGI * tW;
+		w += tW;
+		
+		tpos =  floor(0.5 * vpos.xy) + int2(0, 1);
+		tGI = tex2Dfetch(DenSam1, tpos);
+		tW = rcp(0.0001 + abs(GetDepth(2.0 * tpos / RES) - depth));
+		GI += tGI * tW;
+		w += tW;
+		
+		tpos =  floor(0.5 * vpos.xy) + int2(1, 0);
+		tGI = tex2Dfetch(DenSam1, tpos);
+		tW = rcp(0.0001 + abs(GetDepth(2.0 * tpos / RES) - depth));
+		GI += tGI * tW;
+		w += tW;
+		
+		tpos =  floor(0.5 * vpos.xy) + int2(1, 1);
+		tGI = tex2Dfetch(DenSam1, tpos);
+		tW = rcp(0.0001 + abs(GetDepth(2.0 * tpos / RES) - depth));
+		GI += tGI * tW;
+		w += tW;
+		
+		GI /= w;
 		float AO = GI.a;
 		AO = lerp(1.0, AO, 0.95 * AO_INTENSITY);
 		
 		//Debug out
-		if(DEBUG) return lerp(ReinJ(AO * 0.33 + IReinJ(GI.rgb, HDR, 0, 0) * INTENSITY, HDR, 0, 0), 0.5, lerpVal);
+		//GI = tex2Dfetch(GISam, vpos.xy);
+		//AO = GI.a;
+		if(DEBUG) return lerp(ReinJ(AO*AO * 0.33 + IReinJ(GI.rgb, HDR, 0, 0) * INTENSITY, HDR, 0, 0), 0.5, lerpVal);
 		
 		//Fake albedo
 		//float inGray = prein.r + prein.g + prein.b;
@@ -478,7 +491,17 @@ namespace TurboGI {
 	
 	}
 	
-	technique TurboGI
+	technique TurboGI <
+		ui_label = "Quark: Turbo GI";
+		    ui_tooltip =        
+		        "								   Quark TurboGI - Made by Zenteon           \n"
+		        "\n================================================================================================="
+		        "\n"
+		        "\nTurbo GI is a free lightweight global illumination and AO shader with a rendering budget of"
+		        "\n1ms on a 3050 mobile"
+		        "\n"
+		        "\n=================================================================================================";
+		>	
 	{
 		pass { VertexShader = PostProcessVS; PixelShader = GenNormals; RenderTarget = NormalTex; }
 		pass { VertexShader = PostProcessVS; PixelShader = FillSampleTex; RenderTarget0 = DepDivTex; RenderTarget1 = NorDivTex; RenderTarget2 = LumDivTex; }
