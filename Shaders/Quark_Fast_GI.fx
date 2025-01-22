@@ -69,7 +69,7 @@ uniform int FRAME_COUNT <
 texture texMotionVectors { DIVRES(1); Format = RG16F; };
 sampler MVSam0 { Texture = texMotionVectors; };	
 	
-namespace TurboGI {
+namespace TurboGI2 {
 
 	texture NormalTex { DIVRES(2); Format = RGBA8; MipLevels = 5; };
 	texture NorDivTex { DIVRES(6); Format = RGBA8; MipLevels = 5; };
@@ -244,12 +244,14 @@ namespace TurboGI {
 				float att = rcp(1.0 + 0.05 * dot(posR.z - posV.z, posR.z - posV.z) / attm);
 				cDot *= att;
 				//att *= !any(abs(sampXY - 0.5) > 0.5);
+				float sh = att;
 				[flatten]
 				if(cDot > maxDot) {
 					maxDot = lerp(maxDot, cDot, 0.7);
+					sh = 1.0;
 				}
 				float  trns  = max(CalcTransfer(posV, prjNN, posR, sampN, 20.0, 1.0, 0.0), 0.0);
-				acc += sampL * trns;
+				acc += sh * sampL * trns;
 			}
 			//maxDot = max(acos(maxDot), -3.14159);
 			//maxDot = cos(acos(maxDot) - N);
@@ -474,7 +476,7 @@ namespace TurboGI {
 		//Debug out
 		//GI = tex2Dfetch(GISam, vpos.xy);
 		//AO = GI.a;
-		if(DEBUG) return lerp(ReinJ(AO*AO * 0.33 + IReinJ(GI.rgb, HDR, 0, 0) * INTENSITY, HDR, 0, 0), 0.5, lerpVal);
+		if(DEBUG) return lerp(ReinJ(AO*AO * 0.1 + 2.0 * IReinJ(GI.rgb, HDR, 0, 0) * INTENSITY, HDR, 0, 0), 0.5, lerpVal);
 		
 		//Fake albedo
 		//float inGray = prein.r + prein.g + prein.b;
@@ -482,7 +484,7 @@ namespace TurboGI {
 		
 		//GI blending
 		GI.rgb = IReinJ(GI.rgb, HDR, 0, 0);
-		GI.rgb *= 1.0 * INTENSITY * albedo;
+		GI.rgb *= 3.0 * INTENSITY * albedo;
 		input = IReinJ(input, HDR, 0, 0);
 		
 		
