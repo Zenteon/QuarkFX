@@ -3,7 +3,7 @@
 #define RES float2(BUFFER_WIDTH, BUFFER_HEIGHT)
 #define FARPLANE RESHADE_DEPTH_LINEARIZATION_FAR_PLANE
 #define ASPECT_RATIO (RES.x/RES.y)
-#define IASPECT_RATIO (RES/RES.x)
+#define IASPECT_RATIO float2(1.0, RES.x / RES.y)
 
 #define FULLTEX Width = RES.x; Height = RES.y
 #define HALFTEX Width = 0.5 * RES.x; Height = 0.5 * RES.y
@@ -51,6 +51,7 @@ namespace Continuity {
 
 float3 GetEyePos(float2 xy, float z)
 {
+	//xy *= IASPECT_RATIO;
 	float2 A = -rcp(prjf * IASPECT_RATIO);
 	float3 M = float3(-2*A.xy,0);
 
@@ -60,7 +61,7 @@ float3 GetEyePos(float2 xy, float z)
 
 float3 GetEyePos(float3 xyz)
 {
-	
+	//xyz.xy *= IASPECT_RATIO;
 	float2 A = -rcp(prjf * IASPECT_RATIO);
 	float3 M = float3(-2*A.xy,0);
 
@@ -71,6 +72,7 @@ float3 GetEyePos(float3 xyz)
 float3 NorEyePos(float2 xy)
 {
 	float z = ReShade::GetLinearizedDepth(xy);
+	//xy *= IASPECT_RATIO;
 	float2 A = -rcp(prjf * IASPECT_RATIO);
 	float3 M = float3(-2*A.xy,0);
 
