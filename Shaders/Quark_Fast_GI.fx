@@ -71,7 +71,7 @@ sampler MVSam0 { Texture = texMotionVectors; };
 	
 namespace TurboGI2 {
 
-	texture NormalTex { DIVRES(2); Format = RGBA8; MipLevels = 5; };
+	texture NormalTex { DIVRES(3); Format = RGBA8; MipLevels = 5; };
 	texture NorDivTex { DIVRES(6); Format = RGBA8; MipLevels = 5; };
 	texture DepDivTex { DIVRES(6); Format = R16; MipLevels = 5; };
 	texture LumDivTex { DIVRES(6); Format = RGBA16F; MipLevels = 5; };
@@ -190,7 +190,7 @@ namespace TurboGI2 {
 	{
 		xy = 3.0 * floor(xy * RES * 0.33334) / RES;
 		float3 surfN = 2f * tex2D(Normal, xy).xyz - 1f;
-		
+		const float lr = length(RES);
 		
 		float3 posV  = NorEyePos(xy);
 		float3 vieV  = -normalize(posV);
@@ -209,7 +209,7 @@ namespace TurboGI2 {
 			
 			float dirW = clamp(1.0 / (1.0 + dot(normalize(surfN.xy + off), off)), 0.1, 3.0); //Debias weight			
 			float rnd = IGN((FRAME_MOD + vpos.xy) % RES) + 0.5;
-			off = normalize(surfN.xy + off);
+			//off = normalize(surfN.xy + off);
 			float3 slcN = normalize(cross(float3(off, 0.0f), vieV));
 			//float3 T = cross(vieV, slcN);
 			//float3 RT = -normalize(cross(cross(surfN, vieV), surfN));//normalize(cross(surfN, float3(-off.y, off.x, 0.0)));
@@ -218,7 +218,7 @@ namespace TurboGI2 {
 	   	 //float N = -sign(dot(prjN, T)) * acos( dot(normalize(prjN), vieV) );
 	   	 
 			off /= RES;
-			float maxDot = -1.0;//T <= 0 ? -1.0 : -dot(prjN, vieV);//-sign(dot(prjN, T)) * dot(normalize(prjN), vieV);
+			float2 maxDot = -1.0;//T <= 0 ? -1.0 : -dot(prjN, vieV);//-sign(dot(prjN, T)) * dot(normalize(prjN), vieV);
 			float2 maxAtt;
 			float3 maxPos;
 			float3 maxPos2;
@@ -226,7 +226,7 @@ namespace TurboGI2 {
 			
 			for(int i = 1; i <= 9; i++) 
 			{
-				float lod = floor(0.5 * i);
+				float lod = floor(4.5 / 9.0 * i);
 				float2 sampXY = xy + rnd * RAY_LENGTH * 20.0 * pow(1.35, i) * off;
 				if(sampXY.x > 1.0 || sampXY.x < 0.0) break;
 				if(sampXY.y > 1.0 || sampXY.y < 0.0) break;
@@ -239,30 +239,38 @@ namespace TurboGI2 {
 				float3 sV = normalize(posR - posV);
 				//I got supremely lazy here
 				float cDot = saturate(dot(prjNN, sV));
-				//cDot = dot(sV, normalize(-T)) < 0 ? 1.0 + cDot: cDot;
+				float vDot = dot(vieV, sV);
 				
 				float att = rcp(1.0 + 0.05 * dot(posR.z - posV.z, posR.z - posV.z) / attm);
 				cDot *= att;
 				//att *= !any(abs(sampXY - 0.5) > 0.5);
-				float sh = att;
+				float sh = 1.0 - att;
 				[flatten]
-				if(cDot > maxDot) {
-					maxDot = lerp(maxDot, cDot, 0.7);
+				if(cDot > maxDot.x) {
+					maxDot.x = lerp(maxDot.x, cDot, 0.7);
+				}
+				
+				[flatten]
+				if(vDot > maxDot.y) {
+					maxDot.y = lerp(maxDot.y, vDot, 0.7);
 					sh = 1.0;
 				}
-				float  trns  = max(CalcTransfer(posV, prjNN, posR, sampN, 20.0, 1.0, 0.0), 0.0);
-				acc += sh * sampL * trns;
+				
+				float  trns  = distance(xy, sampXY) * max(CalcTransfer(posV, prjNN, posR, sampN, 5.0, 1.0, 0.0), 0.0);
+				trns *= pow(1.35, i) / pow(1.35, i - 1.0);
+				trns *= dot(sV, surfN) > 0.0;
+				acc += dirW * sh * sampL * trns;
 			}
 			//maxDot = max(acos(maxDot), -3.14159);
 			//maxDot = cos(acos(maxDot) - N);
 			//maxDot = max(maxDot.x, maxDot.y);//maxDot.x < maxDot.y ? maxDot.yx : maxDot;
-			aoAcc += maxDot;//clamp(1.0-maxDot, 0.0, 1);
+			aoAcc += maxDot.x;//clamp(1.0-maxDot, 0.0, 1);
 			
 			//maxDot = acos(maxDot * float2(-1,1));
 			//float cenA = cos(0.5 * (maxDot.x + maxDot.y));
 			
 		}
-		return float4(ReinJ(acc / 3.0, HDR, 0, 0), 1.0 - aoAcc / 3.0);
+		return float4(ReinJ(lr * acc / (9.0 * 3.0), HDR, 0, 0), 1.0 - aoAcc / 3.0);
 	
 	}
 	
@@ -284,7 +292,7 @@ namespace TurboGI2 {
 		
 		for(int i = -2; i <= 2; i++) for(int ii = -2; ii <= 2; ii++)
 		{
-			float2 offset = 3.0 * float2(i, ii) / RES;
+			float2 offset = 6.0 * float2(i, ii) / RES;
 			
 			float4 sampC = tex2Dlod(CurSam, float4(xy + offset, 0, 0));
 			float  sampD = tex2D(DepDiv, xy + offset).x;
@@ -336,7 +344,7 @@ namespace TurboGI2 {
 		
 		float DEG = min(saturate(pow(abs(PD / CD), 20.0) + 0.0), saturate(pow(abs(CD / PD), 10.0) + 0.0));
 		
-		return lerp(cur, pre, DEG * 0.8);
+		return lerp(cur, pre, DEG * 0.85);
 	}
 	
 	float4 CopyGI(float4 vpos : SV_Position, float2 xy : TexCoord) : SV_Target
@@ -470,13 +478,18 @@ namespace TurboGI2 {
 		w += tW;
 		
 		GI /= w;
+		
+		//GI = tex2D(DenSam1, xy);
+		
 		float AO = GI.a;
 		AO = lerp(1.0, AO, 0.95 * AO_INTENSITY);
+		
+		//GI.rgb *= AO;
 		
 		//Debug out
 		//GI = tex2Dfetch(GISam, vpos.xy);
 		//AO = GI.a;
-		if(DEBUG) return lerp(ReinJ(AO*AO * 0.1 + 2.0 * IReinJ(GI.rgb, HDR, 0, 0) * INTENSITY, HDR, 0, 0), 0.5, lerpVal);
+		if(DEBUG) return lerp(ReinJ(AO*AO * 0.05 + IReinJ(GI.rgb, HDR, 0, 0) * INTENSITY, HDR, 0, 0), 0.5, lerpVal);
 		
 		//Fake albedo
 		//float inGray = prein.r + prein.g + prein.b;
@@ -484,12 +497,12 @@ namespace TurboGI2 {
 		
 		//GI blending
 		GI.rgb = IReinJ(GI.rgb, HDR, 0, 0);
-		GI.rgb *= 3.0 * INTENSITY * albedo;
+		GI.rgb *= INTENSITY * albedo;
 		input = IReinJ(input, HDR, 0, 0);
 		
 		
 		
-		return lerp(ReinJ(AO * input + GI.rgb, HDR, 0, 0), prein, lerpVal);
+		return lerp(ReinJ(AO * input + AO * GI.rgb, HDR, 0, 0), prein, lerpVal);
 	
 	}
 	
