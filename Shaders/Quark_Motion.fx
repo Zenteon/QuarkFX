@@ -266,14 +266,19 @@ namespace QuarkMotion {
 		float3 acc;
 		float accw;
 		float noise = 1.0 + IGN(vpos);
+		float2 uvm = 0.5 * rcp(tex2Dsize(tex));
+		float2 xy = vpos.xy * uvm;
+		float cenD = GetDepth(xy);
 		
 		float2 avgSign;
 		for(int i = -ITER; i <= ITER; i++) for(int ii = -ITER; ii <= ITER; ii++)
 		{
 			float2 off = sign(float2(i,ii)) * float2(i,ii) * float2(i,ii);
+			float2 soff = uvm * noise*off;
 			float3 sam = tex2DfetchLin(tex, 0.5 * vpos + noise*off).xyz;
-			float w = exp(-1.0 * sam.z * length(sam.xy) );
-			
+			float samD = GetDepth(xy + soff);
+			float w = exp(-10.0 * sam.z * length(sam.xy) );
+			w *= exp(-level * 5.0 * abs(cenD - samD) / (cenD + 0.01));
 			acc += w * float3((sam.xy), sam.z);
 			accw += w;
 			avgSign += w * sign(sam.xy);
@@ -428,7 +433,7 @@ namespace QuarkMotion {
 	float2 Filter0PS(PS_INPUTS) : SV_Target
 	{
 		//if(FLOW_QUALITY == 0) discard;
-		return FilterMV(sLevel0, sDG2, vpos.xy, xy, 2, 1.0, 2.0);
+		return FilterMV(sLevel0, sDG2, vpos.xy, xy, 1, 1.0, 2.0);
 		//return CurrLayer(sLevel0, vpos.xy, 4, 2);
 	}
 	
@@ -446,13 +451,13 @@ namespace QuarkMotion {
 	float2 SavePS(PS_INPUTS) : SV_Target
 	{
 	 float2 MV = FilterMV(sLevel00, sDG0, vpos.xy, xy, 1, 2.0, 2.0);
-	 return any(abs(MV) > 0.5) ? MV / RES : 0.0;
+	 return any(abs(MV) > 0.1) ? MV / RES : 0.0;
 	}
 	
 	float3 BlendPS(PS_INPUTS) : SV_Target
 	{
 		float2 MV = tex2D(sMV, xy).xy;
-		return DEBUG ? MVtoRGB(100.0 * MV) : GetBackBuffer(xy);
+		return DEBUG ? MVtoRGB(200.0 * MV) : GetBackBuffer(xy);
 	}
 	
 	technique QuarkMotion <
