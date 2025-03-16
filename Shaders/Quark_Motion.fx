@@ -19,25 +19,27 @@ sampler sMV { Texture = texMotionVectors; };
 namespace QuarkMotion {
 	
 	#define FWRAP CLAMP
-
-	texture2D tLevel00 { DIVRES(2); Format = RG16F; };
-	sampler2D sLevel00 { Texture = tLevel00; FILTER(POINT); };
+	#define LFORM RGBA16F
+	#define LFILT POINT
 	
-	texture2D tLevel0t { DIVRES(4); Format = RG16F; };
-	sampler2D sLevel0t { Texture = tLevel0t; FILTER(POINT); };
+	texture2D tLevel00 { DIVRES(2); Format = LFORM; };
+	sampler2D sLevel00 { Texture = tLevel00; FILTER(LFILT); };
+	
+	texture2D tLevel0t { DIVRES(4); Format = LFORM; };
+	sampler2D sLevel0t { Texture = tLevel0t; FILTER(LFILT); };
 	//optical flow
-	texture2D tLevel0 { DIVRES(4); Format = RG16F; };
-	sampler2D sLevel0 { Texture = tLevel0; FILTER(POINT); WRAPMODE(FWRAP); };
-	texture2D tLevel1 { DIVRES(8); Format = RG16F; };
-	sampler2D sLevel1 { Texture = tLevel1; FILTER(POINT); WRAPMODE(FWRAP); };
-	texture2D tLevel2 { DIVRES(16); Format = RG16F; };
-	sampler2D sLevel2 { Texture = tLevel2; FILTER(POINT); WRAPMODE(FWRAP); };
-	texture2D tLevel3 { DIVRES(32); Format = RG16F; };
-	sampler2D sLevel3 { Texture = tLevel3; FILTER(POINT); WRAPMODE(FWRAP); };
-	texture2D tLevel4 { DIVRES(64); Format = RG16F; };
-	sampler2D sLevel4 { Texture = tLevel4; FILTER(POINT); WRAPMODE(FWRAP); };
-	texture2D tLevel5 { DIVRES(128); Format = RG16F; };
-	sampler2D sLevel5 { Texture = tLevel5; FILTER(POINT); WRAPMODE(FWRAP); };
+	texture2D tLevel0 { DIVRES(4); Format = LFORM; };
+	sampler2D sLevel0 { Texture = tLevel0; FILTER(LFILT); WRAPMODE(FWRAP); };
+	texture2D tLevel1 { DIVRES(8); Format = LFORM; };
+	sampler2D sLevel1 { Texture = tLevel1; FILTER(LFILT); WRAPMODE(FWRAP); };
+	texture2D tLevel2 { DIVRES(16); Format = LFORM; };
+	sampler2D sLevel2 { Texture = tLevel2; FILTER(LFILT); WRAPMODE(FWRAP); };
+	texture2D tLevel3 { DIVRES(32); Format = LFORM; };
+	sampler2D sLevel3 { Texture = tLevel3; FILTER(LFILT); WRAPMODE(FWRAP); };
+	texture2D tLevel4 { DIVRES(64); Format = LFORM; };
+	sampler2D sLevel4 { Texture = tLevel4; FILTER(LFILT); WRAPMODE(FWRAP); };
+	texture2D tLevel5 { DIVRES(128); Format = LFORM; };
+	sampler2D sLevel5 { Texture = tLevel5; FILTER(LFILT); WRAPMODE(FWRAP); };
 	//current
 	texture2D tCG0 { DIVRES(1); Format = R16; };
 	sampler2D sCG0 { Texture = tCG0; WRAPMODE(FWRAP); };
@@ -99,15 +101,18 @@ namespace QuarkMotion {
 		return float3(t,d);
 	}
 	
-	void GetBlock(sampler2D tex, float2 vpos, float2 offset, float div, inout float Block[BLOCK_SIZE * BLOCK_SIZE] )
+	float GetBlock(sampler2D tex, float2 vpos, float2 offset, float div, inout float Block[BLOCK_SIZE * BLOCK_SIZE] )
 	{
 		vpos = floor(vpos) * div;
+		float acc;
 		for(int i; i < BLOCK_SIZE * BLOCK_SIZE; i++)
 		{
 			int2 np = int2(floor(float(i) / BLOCK_SIZE), i % BLOCK_SIZE);
 			float tCol = tex2DfetchLin(tex, vpos + np + offset).r;
 			Block[i] = tCol;
+			acc += tCol;
 		}
+		return acc / (BLOCK_SIZE*BLOCK_SIZE);
 	}
 	
 	void GetBlockS(sampler2D tex, float2 vpos, float2 offset, float div, inout float Block[BLOCKS_SIZE * BLOCKS_SIZE] )
@@ -163,16 +168,16 @@ namespace QuarkMotion {
 	}
 	
 	
-	float2 CalcMV(sampler2D cur, sampler2D pre, int2 pos, float2 off, int RAD, bool lev0)
+	float4 CalcMV(sampler2D cur, sampler2D pre, int2 pos, float4 off, int RAD, bool lev0)
 	{
 		float cBlock[BLOCK_SIZE * BLOCK_SIZE];
-		GetBlock(cur, pos, 0.0, 4.0, cBlock);
+		float cenMean = GetBlock(cur, pos, 0.0, 4.0, cBlock);
 		
 		float sBlock[BLOCK_SIZE * BLOCK_SIZE];
 		GetBlock(pre, pos, 0.0, 4.0, sBlock);
 		
 		float2 MV;
-		float2 noff = off;
+		float2 noff = off.xy;
 		
 		float Err = BlockErr(cBlock, sBlock);
 		
@@ -180,7 +185,7 @@ namespace QuarkMotion {
 		
 		for(int i = -RAD; i <= RAD; i++) for(int ii = -RAD; ii <= RAD; ii++)
 		{
-			GetBlock(pre, pos, int2(i, ii) + off, 4.0, sBlock);
+			GetBlock(pre, pos, int2(i, ii) + off.xy, 4.0, sBlock);
 			float tErr = BlockErr(cBlock, sBlock);
 			[flatten]
 			if(tErr < Err)
@@ -213,15 +218,12 @@ namespace QuarkMotion {
 			}
 		}
 		*/
-		
-		float2 foff = MV + off;
-		if(lev0 || length(noff) < 0.1) return foff;
-		return foff;
-		//return lerp(noff, foff, saturate(dot(normalize(noff), normalize(foff))) );
+		Err = cenMean <= exp2(-8) ? 10.0 * Err : Err;
+		return float4(MV + off.xy, off.z + Err, 1.0);
 	}
 	
 	
-	float2 PrevLayer(sampler2D tex, int2 vpos, float level, int ITER)
+	float4 PrevLayer2(sampler2D tex, int2 vpos, float level, int ITER)
 	{
 		float3 cen = tex2DfetchLinD(tex, 0.5 * vpos).xyz;
 		float2 minm; float2 maxm; float3 t; float td;
@@ -256,36 +258,28 @@ namespace QuarkMotion {
 			
 		}
 		
-		return 2.0 * cen.xy;
+		return float4(2.0 * cen.xy, cen.z, 1.0);
 	}
 	
-	float2 PrevLayer2(sampler2D tex, int2 vpos, float level, int ITER)
+	float4 PrevLayer(sampler2D tex, int2 vpos, float level, int ITER)
 	{
-		float2 m1;
-		float2 m2;
-		//calculate std
-		for(int i = -1; i <= 1; i++) for(int ii = -1; ii <= 1; ii++)
+		float3 acc;
+		float accw;
+		float noise = 1.0 + IGN(vpos);
+		
+		float2 avgSign;
+		for(int i = -ITER; i <= ITER; i++) for(int ii = -ITER; ii <= ITER; ii++)
 		{
-			float2 samp = tex2DfetchLin(tex, float2(i,ii) + 0.5 * vpos).xy;
-			m1 += samp;
-			m2 += samp*samp;
+			float2 off = sign(float2(i,ii)) * float2(i,ii) * float2(i,ii);
+			float3 sam = tex2DfetchLin(tex, 0.5 * vpos + noise*off).xyz;
+			float w = exp(-1.0 * sam.z * length(sam.xy) );
+			
+			acc += w * float3((sam.xy), sam.z);
+			accw += w;
+			avgSign += w * sign(sam.xy);
 		}
-		m1 /= 9.0;
-		m2 /= 9.0;
-		float2 std = sqrt(abs(m1*m1 - m2));
-		
-		
-		float4 acc;
-		for(int i = -1; i <= 1; i++) for(int ii = -1; ii <= 1; ii++)
-		{
-			float2 samp = tex2DfetchLin(tex, float2(i,ii) + 0.5 * vpos).xy;
-			float2 w = 1.0;//abs(m1 - samp) < (1000.0 * std);
-			acc += w.xyxy * float4(samp, 1.0.xx);
-		}
-		
-		return acc.xy / acc.zw;//clamp(m1, -std, std);
+		return float4(2.0 * acc.xy / accw, 1.0 * acc.z / accw, 1.0);
 	}
-	
 	float2 CurrLayer(sampler2D tex, int2 vpos, float level, int ITER)
 	{
 		float2 cen = tex2DfetchLin(tex, vpos).xy;
@@ -374,30 +368,30 @@ namespace QuarkMotion {
 	//Motion Passes
 	//=======================================================================================
 	
-	float2 Level4PS(PS_INPUTS) : SV_Target
+	float4 Level4PS(PS_INPUTS) : SV_Target
 	{
 		return CalcMV(sCG4, sPG4, vpos.xy, 0, 3, 1);
 	}
 	
-	float2 Level3PS(PS_INPUTS) : SV_Target
+	float4 Level3PS(PS_INPUTS) : SV_Target
 	{
-		return CalcMV(sCG3, sPG3, vpos.xy, PrevLayer(sLevel4, vpos.xy, 1, 24), 2, 0);
+		return CalcMV(sCG3, sPG3, vpos.xy, PrevLayer(sLevel4, vpos.xy, 1, 3), 2, 0);
 	}
 	
-	float2 Level2PS(PS_INPUTS) : SV_Target
+	float4 Level2PS(PS_INPUTS) : SV_Target
 	{
-		return CalcMV(sCG2, sPG2, vpos.xy, PrevLayer(sLevel3, vpos.xy, 1, 16), 1, 0);
+		return CalcMV(sCG2, sPG2, vpos.xy, PrevLayer(sLevel3, vpos.xy, 1, 4), 1, 0);
 	}
 	
-	float2 Level1PS(PS_INPUTS) : SV_Target
+	float4 Level1PS(PS_INPUTS) : SV_Target
 	{
-		return CalcMV(sCG1, sPG1, vpos.xy, PrevLayer(sLevel2, vpos.xy, 1, 16), 1, 0);
+		return CalcMV(sCG1, sPG1, vpos.xy, PrevLayer(sLevel2, vpos.xy, 1, 4), 1, 0);
 	}
 	
-	float2 Level0PS(PS_INPUTS) : SV_Target
+	float4 Level0PS(PS_INPUTS) : SV_Target
 	{
 		//if(FLOW_QUALITY == 0) discard;
-		return CalcMV(sCG0, sPG0, vpos.xy, PrevLayer(sLevel1, vpos.xy, 1, 12), 1, 0);
+		return CalcMV(sCG0, sPG0, vpos.xy, PrevLayer(sLevel1, vpos.xy, 1, 2), 1, 0);
 	}
 	
 	//=======================================================================================
@@ -409,28 +403,33 @@ namespace QuarkMotion {
 		float4 acc;
 		float cenD = tex2Dfetch(depTex, vpos).x;
 		//float2 cenMV = tex2Dfetch(tex, vpos / upscale).xy;
+		float2 meanSign;
 		
 		for(int i = -rad; i <= rad; i++) for(int ii = -rad; ii <= rad; ii++)
 		{
 			int2 off = offm * int2(i,ii);
-			float2 samp = tex2Dfetch(tex, (vpos + off) / upscale).xy;
+			float3 samp = tex2Dfetch(tex, (vpos + off) / upscale).xyz;
+			float sampL = length(samp.xy);
 			
 			
 			float samD = tex2Dfetch(depTex, vpos + off).x;
 			
+			
 			float w = exp(-30.0 * abs(samD - cenD) / (exp2(-32) + cenD)) + 0.0001;
+			//w *= exp(-0.01 * sampL * samp.z);
 			//w *= any(sign(samp) == sign(cenMV));
 			
-			acc += w * float4(samp, length(samp), 1.0);
+			acc += w * float4(samp.xy, sampL, 1.0);
+			meanSign += w * sign(samp.xy);
 		}
-		return acc.z * normalize(acc.xy) / acc.w;
+		return acc.xy / acc.w;
 	}
 	
 	float2 Filter0PS(PS_INPUTS) : SV_Target
 	{
 		//if(FLOW_QUALITY == 0) discard;
-		//return FilterMV(sLevel0, sDG2, vpos.xy, xy, 3, 1.0, 2.0);
-		return CurrLayer(sLevel0, vpos.xy, 3, 2);
+		return FilterMV(sLevel0, sDG2, vpos.xy, xy, 2, 1.0, 2.0);
+		//return CurrLayer(sLevel0, vpos.xy, 4, 2);
 	}
 	
 	float2 Filter1PS(PS_INPUTS) : SV_Target
@@ -447,13 +446,13 @@ namespace QuarkMotion {
 	float2 SavePS(PS_INPUTS) : SV_Target
 	{
 	 float2 MV = FilterMV(sLevel00, sDG0, vpos.xy, xy, 1, 2.0, 2.0);
-	 return any(abs(MV) > 1) ? MV / RES : 0.0;
+	 return any(abs(MV) > 0.5) ? MV / RES : 0.0;
 	}
 	
 	float3 BlendPS(PS_INPUTS) : SV_Target
 	{
 		float2 MV = tex2D(sMV, xy).xy;
-		return DEBUG ? MVtoRGB(30.0 * MV) : GetBackBuffer(xy);
+		return DEBUG ? MVtoRGB(100.0 * MV) : GetBackBuffer(xy);
 	}
 	
 	technique QuarkMotion <
